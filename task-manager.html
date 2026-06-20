@@ -390,6 +390,15 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
 .proj-add-row { display: flex; align-items: center; gap: 10px; padding: 11px 16px; cursor: pointer; color: var(--t3); font-size: 13.5px; border: 1.5px dashed var(--border); border-radius: var(--r); transition: all .12s; background: transparent; }
 .proj-add-row:hover { color: var(--acc); border-color: var(--acc); background: var(--acc-bg); }
 
+/* ── NOTES WIDGET ── */
+.notes-textarea {
+  width: 100%; min-height: 140px; border: none; outline: none;
+  font-size: 13.5px; font-family: var(--font); color: var(--text);
+  background: transparent; resize: vertical; direction: rtl;
+  line-height: 1.65; padding: 0;
+}
+.notes-textarea::placeholder { color: var(--t3); }
+
 /* ── LAYOUT EDITOR ── */
 .edit-mode-bar {
   background: #fef9c3; border-bottom: 1px solid #fde68a;
@@ -745,6 +754,8 @@ let images = {};
 let positions = {}; // { id: {x:50, y:50} } — background-position %
 let goals = {};
 let questions = []; // [{id, text, asked}]
+let weeklyOrder = [];
+let hubNotes = ''; // general notes on home page
 let homeCalMonth = new Date().getMonth();
 let homeCalYear  = new Date().getFullYear();
 let selColor = COLORS[0];
@@ -757,13 +768,17 @@ function load() {
   try { images    = JSON.parse(localStorage.getItem('tf3_images')   ||'{}'); } catch { images={}; }
   try { positions = JSON.parse(localStorage.getItem('tf3_positions')||'{}'); } catch { positions={}; }
   try { goals     = JSON.parse(localStorage.getItem('tf3_goals')    ||'{}'); } catch { goals={}; }
-  try { questions = JSON.parse(localStorage.getItem('tf3_questions')||'[]'); } catch { questions=[]; }
+  try { questions    = JSON.parse(localStorage.getItem('tf3_questions')||'[]'); } catch { questions=[]; }
+  try { weeklyOrder  = JSON.parse(localStorage.getItem('tf3_worder')   ||'[]'); } catch { weeklyOrder=[]; }
+  hubNotes = localStorage.getItem('tf3_hubnotes') || '';
 }
 function save() { localStorage.setItem('tf3_data', JSON.stringify({projects:S.projects,tasks:S.tasks})); }
 function saveImages()    { localStorage.setItem('tf3_images',    JSON.stringify(images)); }
 function savePositions() { localStorage.setItem('tf3_positions', JSON.stringify(positions)); }
 function saveGoals()      { localStorage.setItem('tf3_goals',      JSON.stringify(goals)); }
-function saveQuestions() { localStorage.setItem('tf3_questions', JSON.stringify(questions)); }
+function saveQuestions()   { localStorage.setItem('tf3_questions', JSON.stringify(questions)); }
+function saveWeeklyOrder() { localStorage.setItem('tf3_worder',    JSON.stringify(weeklyOrder)); }
+function saveHubNotes()   { localStorage.setItem('tf3_hubnotes', hubNotes); }
 
 // ── COVER DRAG ────────────────────────────────────────────────────
 function applyCoverStyle(el, imgSrc, pid) {
@@ -999,8 +1014,8 @@ function renderHomePage(container) {
     today:     ()=>buildTodayWidget(today),
     cal:       ()=>buildMiniCalWidget(today),
     questions: ()=>buildQuestionsWidget(),
-    // legacy key fallback
-    calqs: ()=>buildMiniCalWidget(today),
+    notes:     ()=>buildNotesWidget(),
+    calqs:     ()=>buildMiniCalWidget(today), // legacy
   };
   homeLayout.forEach(({id})=>{
     const builder = widgetBuilders[id];
@@ -1096,11 +1111,29 @@ function buildTodayWidget(today) {
     }
   });
 
-  // sort: undone first (by date), done last
-  weekItems.sort((a,b)=>{
-    if(a.done !== b.done) return a.done ? 1 : -1;
-    return (a.date||'').localeCompare(b.date||'');
+  // assign compound keys
+  weekItems.forEach(item=>{
+    item.key = item.type==='sub' ? `sub:${item.id}:${item.tid}` : `task:${item.tid}`;
   });
+
+  // ensure weeklyOrder contains all current items (add new ones at the end)
+  const currentKeys = weekItems.map(i=>i.key);
+  // remove stale keys
+  weeklyOrder = weeklyOrder.filter(k=>currentKeys.includes(k));
+  // add new keys not yet in order (sorted by date by default)
+  const newItems = weekItems.filter(i=>!weeklyOrder.includes(i.key));
+  newItems.sort((a,b)=>{
+    if(a.done!==b.done)return a.done?1:-1;
+    return(a.date||'').localeCompare(b.date||'');
+  });
+  newItems.forEach(i=>weeklyOrder.push(i.key));
+
+  // sort weekItems by weeklyOrder, keeping done at bottom
+  const undone = weekItems.filter(i=>!i.done);
+  const done2  = weekItems.filter(i=>i.done);
+  const sortByOrder = arr=>arr.sort((a,b)=>weeklyOrder.indexOf(a.key)-weeklyOrder.indexOf(b.key));
+  sortByOrder(undone); sortByOrder(done2);
+  weekItems.splice(0, weekItems.length, ...undone, ...done2);
 
   if(!weekItems.length){
     const em=document.createElement('div');em.className='today-empty';em.textContent='אין משימות השבוע ✓';wBody.appendChild(em);
@@ -1114,6 +1147,38 @@ function buildTodayWidget(today) {
       }
       const row=document.createElement('div');row.className='today-task-item';
       if(item.done) row.style.opacity='.5';
+
+      // ▲▼ reorder arrows
+      const arrows=document.createElement('div');
+      arrows.style.cssText='display:flex;flex-direction:column;gap:0;opacity:0;transition:opacity .1s;flex-shrink:0';
+      row.addEventListener('mouseenter',()=>arrows.style.opacity='1');
+      row.addEventListener('mouseleave',()=>arrows.style.opacity='0');
+      const mkHubArrow=(txt,dir)=>{
+        const b=document.createElement('button');b.type='button';
+        b.style.cssText='background:none;border:none;cursor:pointer;font-size:9px;color:var(--t3);padding:1px 3px;line-height:1';
+        b.textContent=txt;
+        b.onmouseenter=()=>b.style.color='var(--acc)';b.onmouseleave=()=>b.style.color='var(--t3)';
+        b.onclick=e=>{
+          e.stopPropagation();
+          const ri=weeklyOrder.indexOf(item.key);
+          if(ri===-1)return;
+          // only swap within same done group
+          const sameGroup=weeklyOrder.filter(k=>{
+            const it=weekItems.find(x=>x.key===k)||{done:item.done};
+            return it.done===item.done;
+          });
+          const gi=sameGroup.indexOf(item.key);
+          const ni=gi+dir;
+          if(ni<0||ni>=sameGroup.length)return;
+          const swapKey=sameGroup[ni];
+          const riSwap=weeklyOrder.indexOf(swapKey);
+          [weeklyOrder[ri],weeklyOrder[riSwap]]=[weeklyOrder[riSwap],weeklyOrder[ri]];
+          saveWeeklyOrder(); render();
+        };
+        return b;
+      };
+      arrows.append(mkHubArrow('▲',-1),mkHubArrow('▼',1));
+
       const chk=document.createElement('div');chk.className='today-chk'+(item.done?' done':'');chk.textContent='✓';
       chk.onclick=()=>{if(item.type==='sub')toggleSubtask(item.tid,item.id);else toggleDone(item.tid);};
       const info=document.createElement('div');info.className='today-task-info';
@@ -1124,7 +1189,32 @@ function buildTodayWidget(today) {
       const dtEl=document.createElement('span');dtEl.style.cssText=`font-size:11px;color:${dl<0?'#ef4444':dl===0?'var(--acc)':'var(--t3)'}`;
       dtEl.textContent=dl<0?`⚠️ ${fmtDate(item.date)}`:dl===0?'היום':dl===1?'מחר':fmtDate(item.date);
       meta.append(prj,dtEl);
-      info.append(name,meta);row.append(chk,info);wBody.appendChild(row);
+      // edit button
+      const editBtn=document.createElement('button');
+      editBtn.style.cssText='background:none;border:none;cursor:pointer;font-size:13px;color:var(--t3);padding:4px 6px;border-radius:6px;opacity:0;transition:opacity .12s;flex-shrink:0';
+      editBtn.textContent='✏️';
+      row.addEventListener('mouseenter',()=>editBtn.style.opacity='1');
+      row.addEventListener('mouseleave',()=>editBtn.style.opacity='0');
+      if(item.type==='sub'){
+        editBtn.onclick=e=>{
+          e.stopPropagation();
+          const inp=document.createElement('input');
+          inp.style.cssText='font-size:14px;border:none;border-bottom:1.5px solid var(--acc);outline:none;background:transparent;color:var(--text);font-family:var(--font);direction:rtl;width:100%;';
+          inp.value=item.title;
+          name.replaceWith(inp); inp.focus(); inp.select();
+          function finEdit(){
+            const v=inp.value.trim();
+            const task=S.tasks.find(x=>x.id===item.tid);
+            if(task&&v){const st=task.subtasks.find(s=>s.id===item.id);if(st)st.title=v;}
+            save(); render();
+          }
+          inp.onblur=finEdit;
+          inp.onkeydown=e=>{if(e.key==='Enter')finEdit();if(e.key==='Escape')render();};
+        };
+      } else {
+        editBtn.onclick=e=>{e.stopPropagation();openTaskModal('',item.tid);};
+      }
+      info.append(name,meta);row.append(arrows,chk,info,editBtn);wBody.appendChild(row);
     });
     const doneC=weekItems.filter(i=>i.done).length;
     const cnt=document.createElement('div');cnt.className='today-count';
@@ -1248,6 +1338,22 @@ function buildQuestionsWidget() {
   return w;
 }
 
+function buildNotesWidget() {
+  const w = document.createElement('div'); w.className = 'widget';
+  const wHdr = document.createElement('div'); wHdr.className = 'widget-hdr';
+  wHdr.textContent = 'מחשבות והערות';
+  const wBody = document.createElement('div'); wBody.className = 'widget-body';
+  const ta = document.createElement('textarea'); ta.className = 'notes-textarea';
+  ta.placeholder = 'כתבי כאן מחשבות, רעיונות, תזכורות לעצמך...';
+  ta.value = hubNotes;
+  ta.oninput = () => { hubNotes = ta.value; saveHubNotes(); };
+  // prevent drag-to-reorder from triggering while typing
+  ta.addEventListener('mousedown', e => e.stopPropagation());
+  wBody.appendChild(ta);
+  w.append(wHdr, wBody);
+  return w;
+}
+
 function buildUpcomingStrip() {
   const strip = document.createElement('div'); strip.className = 'upcoming-strip';
   const hdr = document.createElement('div'); hdr.className = 'upcoming-strip-hdr';
@@ -1313,7 +1419,7 @@ function saveLayout() { localStorage.setItem('tf3_layout', JSON.stringify(layout
 
 function getHomeLayout() {
   if(!layoutCfg.home) layoutCfg.home = [
-    {id:'goals',span:1},{id:'today',span:1},{id:'cal',span:1},{id:'questions',span:1}
+    {id:'goals',span:1},{id:'today',span:1},{id:'cal',span:1},{id:'questions',span:1},{id:'notes',span:1}
   ];
   return layoutCfg.home;
 }
@@ -1564,27 +1670,63 @@ function buildProjCard(t) {
       const spb=document.createElement('div');spb.className='sub-prog-bar-full';
       const spf=document.createElement('div');spf.className='sub-prog-bar-fill';spf.style.cssText=`width:${pct}%;background:${p.color}`;spb.appendChild(spf);stBody.appendChild(spb);
     }
+    // use original (unsorted) array for reorder ops — sts is display-sorted copy
+    const rawStArr = t.subtasks || [];
     let addedDoneSep = false;
     sts.forEach((st, idx)=>{
-      // separator before first done item
       if(st.done && !addedDoneSep && done > 0 && done < sts.length) {
         addedDoneSep = true;
         const sep = document.createElement('div');
         sep.style.cssText = 'height:1px;background:var(--border);margin:6px 0 4px;';
         stBody.appendChild(sep);
       }
-      const item=document.createElement('div');
-      item.className='st-item';
+      const item=document.createElement('div'); item.className='st-item';
       if(st.done) item.style.opacity='.55';
+
+      // ── reorder arrows ──
+      const arrows=document.createElement('div');
+      arrows.style.cssText='display:flex;flex-direction:column;gap:0;opacity:0;transition:opacity .1s;flex-shrink:0';
+      item.addEventListener('mouseenter',()=>arrows.style.opacity='1');
+      item.addEventListener('mouseleave',()=>arrows.style.opacity='0');
+      const realIdx=()=>rawStArr.findIndex(s=>s.id===st.id);
+      const mkArrow=(txt,dir)=>{
+        const b=document.createElement('button');b.type='button';
+        b.style.cssText='background:none;border:none;cursor:pointer;font-size:9px;color:var(--t3);padding:1px 3px;line-height:1;';
+        b.textContent=txt;
+        b.onmouseenter=()=>b.style.color='var(--acc)';
+        b.onmouseleave=()=>b.style.color='var(--t3)';
+        b.onclick=e=>{e.stopPropagation();
+          const ri=realIdx(); const ni=ri+dir;
+          if(ni<0||ni>=rawStArr.length)return;
+          [rawStArr[ri],rawStArr[ni]]=[rawStArr[ni],rawStArr[ri]];
+          save();render();};
+        return b;
+      };
+      arrows.append(mkArrow('▲',-1), mkArrow('▼',1));
+
       const stChk=document.createElement('div');stChk.className='st-check2'+(st.done?' done':'');stChk.textContent='✓';stChk.onclick=()=>toggleSubtask(t.id,st.id);
+
+      // ── editable title ──
       const stName=document.createElement('span');stName.className='st-name'+(st.done?' struck':'');stName.textContent=st.title;
+      stName.title='לחץ פעמיים לעריכה';
+      stName.ondblclick=e=>{
+        e.stopPropagation();
+        const inp=document.createElement('input');
+        inp.style.cssText='flex:1;font-size:13px;border:none;border-bottom:1.5px solid var(--acc);outline:none;background:transparent;color:var(--text);font-family:var(--font);direction:rtl;';
+        inp.value=st.title; stName.replaceWith(inp); inp.focus(); inp.select();
+        function finEdit(){const v=inp.value.trim();if(v)st.title=v;save();render();}
+        inp.onblur=finEdit;inp.onkeydown=e=>{if(e.key==='Enter')finEdit();if(e.key==='Escape'){inp.value=st.title;finEdit();}};
+      };
+
       const stDW=document.createElement('span');
       const dl2=daysLeft(st.date);const dc=st.date&&!st.done?(dl2<0?'urg':dl2<=7?'soon':''):'';
       const dateBtn=document.createElement('button');dateBtn.className=`st-date-btn ${dc}`;dateBtn.textContent=st.date?fmtDate(st.date):'＋ תאריך';
       dateBtn.onclick=()=>{const inp=document.createElement('input');inp.type='date';inp.className='st-date-inp';if(st.date)inp.value=st.date;stDW.replaceChild(inp,dateBtn);inp.focus();function fin(){st.date=inp.value;save();render();}inp.onchange=fin;inp.onblur=fin;inp.onkeydown=e=>{if(e.key==='Enter'||e.key==='Escape')fin();};};
       stDW.appendChild(dateBtn);
+
       const stDel=document.createElement('button');stDel.className='st-del2';stDel.textContent='✕';stDel.onclick=()=>delSubtask(t.id,st.id);
-      item.append(stChk,stName,stDW,stDel);stBody.appendChild(item);
+
+      item.append(arrows,stChk,stName,stDW,stDel);stBody.appendChild(item);
     });
     // inline add subtask
     const addRow=document.createElement('div');addRow.className='st-add-inline';
