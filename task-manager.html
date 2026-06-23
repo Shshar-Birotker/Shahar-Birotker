@@ -2399,10 +2399,19 @@ function importData(e){const f=e.target.files[0];if(!f)return;const r=new FileRe
 function toast(msg){const t=document.createElement('div');t.className='toast';t.textContent=msg;document.getElementById('toasts').appendChild(t);setTimeout(()=>t.remove(),2500);}
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeTaskModal();closeProjModal();}});
 
-// load localStorage first (instant), then sync with cloud in background
+// load localStorage first (instant)
 load(); loadLayout(); renderSidebar(); render();
 setSyncDot('saving');
-loadFromCloud().then(loaded => { if(loaded) { renderSidebar(); render(); } });
+// sync with cloud: if cloud has data → use it; if cloud is empty → push local data up
+loadFromCloud().then(loaded => {
+  if(loaded) {
+    renderSidebar(); render(); // cloud had data — use it
+  } else {
+    // cloud is empty — push all local data up now
+    saveToCloud();
+    setSyncDot('saving');
+  }
+});
 
 // no resize re-render — canvas uses absolute positioning and saves positions in localStorage
 </script>
