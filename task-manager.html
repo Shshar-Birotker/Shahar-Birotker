@@ -528,6 +528,300 @@ body { font-family: var(--font); background: var(--bg); color: var(--text); disp
   align-items: center; border-top: 1px solid var(--acc);
 }
 .layout-editing .card-size-bar { display: flex; }
+
+
+/* ══ MOBILE RESPONSIVE (768px and below) ══ */
+@media (max-width: 768px) {
+  /* Hide sidebar on mobile */
+  #sb {
+    display: none;
+    width: 0;
+    overflow: hidden;
+  }
+
+  /* Main content takes full width */
+  #main {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Content padding for mobile */
+  #content {
+    padding: 0 16px 80px;
+  }
+
+  /* Cover section adjustments */
+  .cover-section {
+    margin: 0 -16px;
+    width: calc(100% + 32px);
+  }
+
+  .cover-img-wrap {
+    height: 120px;
+  }
+
+  .cover-domain-name {
+    right: 16px;
+    font-size: 18px;
+  }
+
+  /* Make buttons and inputs mobile-friendly */
+  button, input[type="button"], input[type="submit"], .btn {
+    min-height: 44px;
+    font-size: 16px;
+    padding: 12px 16px;
+    border-radius: 8px;
+  }
+
+  /* Forms stack vertically on mobile */
+  .frow {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Floating action button positioning */
+  .fab {
+    bottom: 20px;
+    left: 20px;
+    width: 56px;
+    height: 56px;
+    font-size: 28px;
+  }
+
+  /* Modal adjustments */
+  .modal {
+    width: 95%;
+    max-width: 95%;
+    max-height: 95vh;
+    border-radius: 12px;
+  }
+
+  /* Table responsive */
+  .task-table {
+    font-size: 13px;
+  }
+
+  .task-table th,
+  .task-table td {
+    padding: 10px 8px;
+  }
+
+  /* Text sizes for readability */
+  body {
+    font-size: 14px;
+  }
+
+  h1, h2, h3 {
+    font-size: 16px;
+  }
+
+  /* Home page cover */
+  .home-cover {
+    height: 140px;
+    margin: 0 -16px;
+    width: calc(100% + 32px);
+  }
+
+  .home-emoji {
+    font-size: 40px;
+    margin-top: -20px;
+  }
+
+  .home-title {
+    font-size: 24px;
+  }
+
+  /* View toggle bar */
+  .view-toggle-bar {
+    padding: 12px 16px 0;
+  }
+
+  /* Project cards on mobile */
+  .proj-card-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  /* Upcoming chips */
+  .upcoming-chips {
+    flex-direction: column;
+  }
+
+  .up-chip {
+    width: 100%;
+  }
+
+  /* Day tabs */
+  .day-tabs {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .day-tab {
+    padding: 4px 12px;
+    font-size: 12px;
+  }
+
+  /* Sidebar search stays visible if sidebar ever shows */
+  .sb-search input {
+    font-size: 16px;
+  }
+
+  /* Canvas widgets hide on very small screens */
+  .home-canvas {
+    min-width: auto;
+  }
+
+  /* Widget adjustments */
+  .widget {
+    border: none;
+    border-radius: 8px;
+  }
+
+  /* Inline add row */
+  .inline-input-wrap {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .inline-task-input {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  /* Edit mode bar on mobile */
+  .edit-mode-bar {
+    padding: 8px 16px;
+    flex-wrap: wrap;
+  }
+
+  .edit-mode-bar button {
+    min-height: 36px;
+  }
+
+  /* Status badge sizing */
+  .sts-badge {
+    font-size: 11px;
+    padding: 4px 8px;
+  }
+
+  /* Today tasks widget */
+  .today-task-item {
+    gap: 8px;
+    padding: 8px 0;
+  }
+
+  /* Goals widget */
+  .goal-item {
+    gap: 10px;
+    padding: 8px 0;
+  }
+
+  /* Questions widget */
+  .q-item {
+    gap: 6px;
+    padding: 6px 0;
+  }
+
+  /* Toasts positioning */
+  #toasts {
+    bottom: 16px;
+    left: 16px;
+  }
+
+  .toast {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+}
+
+/* ══ EXTRA SMALL SCREENS (480px and below) ══ */
+@media (max-width: 480px) {
+  #content {
+    padding: 0 12px 70px;
+  }
+
+  .cover-section {
+    margin: 0 -12px;
+    width: calc(100% + 24px);
+  }
+
+  .fab {
+    width: 52px;
+    height: 52px;
+    font-size: 24px;
+  }
+
+  .home-title {
+    font-size: 20px;
+  }
+
+  .home-emoji {
+    font-size: 32px;
+    margin-bottom: 6px;
+  }
+
+  .view-toggle-bar {
+    padding: 10px 12px 0;
+  }
+
+  .modal {
+    width: 98%;
+    max-width: 98%;
+  }
+
+  button, input[type="button"], input[type="submit"], .btn {
+    min-height: 40px;
+    font-size: 15px;
+    padding: 10px 12px;
+  }
+
+  /* Reduce table padding */
+  .task-table th,
+  .task-table td {
+    padding: 8px 6px;
+  }
+
+  .task-table th:first-child,
+  .task-table td:first-child {
+    width: 32px;
+  }
+
+  /* Smaller font for table on tiny screens */
+  .task-table {
+    font-size: 12px;
+  }
+
+  /* Shrink inline controls */
+  .inline-sel,
+  .inline-date-in {
+    max-width: 90px;
+    font-size: 11px;
+  }
+
+  /* Header padding */
+  .home-header {
+    padding: 0 12px 16px;
+  }
+
+  /* Toasts smaller on very small screens */
+  .toast {
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+
+  /* Row title smaller */
+  .row-title {
+    font-size: 13px;
+  }
+
+  /* Project title smaller */
+  .proj-title {
+    font-size: 13px;
+  }
+}
+
 </style>
 </head>
 <body>
