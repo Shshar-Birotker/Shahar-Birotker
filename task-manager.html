@@ -1126,11 +1126,19 @@ let cloudSyncTimer = null;
 
 async function loadFromCloud() {
   try {
+    console.log('[SYNC] Loading from Supabase...');
     const res = await fetch(`${SB_URL}/rest/v1/welfare_data?id=eq.main&select=*`, { headers: SB_HDR });
-    if (!res.ok) return false;
+    if (!res.ok) {
+      console.warn('[SYNC] Failed to load from cloud:', res.status, res.statusText);
+      return false;
+    }
     const rows = await res.json();
-    if (!rows || !rows.length) return false;
+    if (!rows || !rows.length) {
+      console.warn('[SYNC] No data in cloud');
+      return false;
+    }
     const r = rows[0];
+    console.log('[SYNC] Cloud data loaded successfully');
     if (r.data && r.data.projects) { S.projects = r.data.projects; S.tasks = r.data.tasks; }
     if (r.goals)        goals       = r.goals;
     if (r.questions)    questions   = r.questions;
@@ -1142,8 +1150,14 @@ async function loadFromCloud() {
     // mirror to localStorage as offline backup
     save(); saveGoals(); saveQuestions(); saveWidgetNames();
     saveHubTitle(); saveHubNotes(); saveWeeklyOrder(); savePositions();
-    setSyncDot('saved'); return true;
-  } catch(e) { setSyncDot('offline'); return false; }
+    setSyncDot('saved'); 
+    console.log('[SYNC] Data synced to localStorage as backup');
+    return true;
+  } catch(e) { 
+    console.error('[SYNC] Error loading from cloud:', e);
+    setSyncDot('offline'); 
+    return false; 
+  }
 }
 
 async function saveToCloud() {
@@ -1151,6 +1165,7 @@ async function saveToCloud() {
   cloudSyncTimer = setTimeout(async () => {
     setSyncDot('saving');
     try {
+      console.log('[SYNC] Saving to Supabase...');
       const res = await fetch(`${SB_URL}/rest/v1/welfare_data?id=eq.main`, {
         method: 'PATCH',
         headers: { ...SB_HDR, 'Prefer': 'return=minimal' },
@@ -1162,8 +1177,17 @@ async function saveToCloud() {
           updated_at: new Date().toISOString()
         })
       });
-      setSyncDot(res.ok ? 'saved' : 'error');
-    } catch(e) { setSyncDot('offline'); }
+      if (res.ok) {
+        console.log('[SYNC] Successfully saved to Supabase');
+        setSyncDot('saved');
+      } else {
+        console.warn('[SYNC] Save failed:', res.status, res.statusText);
+        setSyncDot('error');
+      }
+    } catch(e) { 
+      console.error('[SYNC] Error saving to cloud:', e);
+      setSyncDot('offline'); 
+    }
   }, 1500);
 }
 
@@ -2696,15 +2720,21 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeTaskModal();cl
 // load localStorage first (instant)
 load(); loadLayout(); renderSidebar(); render();
 setSyncDot('saving');
+console.log('[SYNC] App initialized, attempting cloud sync...');
 // sync with cloud: if cloud has data → use it; if cloud is empty → push local data up
 loadFromCloud().then(loaded => {
   if(loaded) {
+    console.log('[SYNC] Cloud data was loaded, re-rendering UI');
     renderSidebar(); render(); // cloud had data — use it
   } else {
+    console.log('[SYNC] Cloud is empty, pushing local data to cloud');
     // cloud is empty — push all local data up now
     saveToCloud();
     setSyncDot('saving');
   }
+}).catch(err => {
+  console.error('[SYNC] Error during initialization sync:', err);
+  setSyncDot('offline');
 });
 
 // no resize re-render — canvas uses absolute positioning and saves positions in localStorage
