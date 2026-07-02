@@ -1050,7 +1050,7 @@ function flatItems(tasks, dateFilter) {
 function getDateFilter(tab) {
   const today=new Date(); today.setHours(0,0,0,0);
   const tom=new Date(today); tom.setDate(tom.getDate()+1);
-  const weekEnd=new Date(today); weekEnd.setDate(weekEnd.getDate()+7);
+  const weekEnd=new Date(today); weekEnd.setDate(weekEnd.getDate()+14);
   if(tab==='today') return d=>{if(!d)return false;const dt=new Date(d+'T00:00:00');return dt.getTime()===today.getTime();};
   if(tab==='tomorrow') return d=>{if(!d)return false;const dt=new Date(d+'T00:00:00');return dt.getTime()===tom.getTime();};
   if(tab==='week') return d=>{if(!d)return false;const dt=new Date(d+'T00:00:00');return dt>=today&&dt<=weekEnd;};
