@@ -1126,20 +1126,43 @@ let cloudSyncTimer = null;
 
 async function loadFromCloud() {
   try {
-    console.log('[SYNC] Loading from Supabase...');
-    const res = await fetch(`${SB_URL}/rest/v1/welfare_data?id=eq.main&select=*`, { headers: SB_HDR });
+    console.log('[CloudSync] Starting loadFromCloud...');
+    const url = `${SB_URL}/rest/v1/welfare_data?id=eq.main&select=*`;
+    const opts = {
+      method: 'GET',
+      headers: SB_HDR,
+      // Mobile/CORS workaround
+      mode: 'cors',
+      credentials: 'omit',
+      cache: 'no-store'
+    };
+
+    const res = await Promise.race([
+      fetch(url, opts),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+    ]);
+
     if (!res.ok) {
-      console.warn('[SYNC] Failed to load from cloud:', res.status, res.statusText);
+      console.error('[CloudSync] HTTP error:', res.status, res.statusText);
+      setSyncDot('offline');
       return false;
     }
+
     const rows = await res.json();
+    console.log('[CloudSync] Loaded rows:', rows?.length || 0);
+
     if (!rows || !rows.length) {
-      console.warn('[SYNC] No data in cloud');
+      console.log('[CloudSync] No data in cloud, keeping local');
+      setSyncDot('offline');
       return false;
     }
+
     const r = rows[0];
-    console.log('[SYNC] Cloud data loaded successfully');
-    if (r.data && r.data.projects) { S.projects = r.data.projects; S.tasks = r.data.tasks; }
+    if (r.data && r.data.projects && Array.isArray(r.data.projects) && r.data.projects.length > 0) {
+      console.log('[CloudSync] Found', r.data.tasks?.length || 0, 'tasks in cloud');
+      S.projects = r.data.projects;
+      S.tasks = r.data.tasks;
+    }
     if (r.goals)        goals       = r.goals;
     if (r.questions)    questions   = r.questions;
     if (r.widget_names) widgetNames = r.widget_names;
@@ -1147,16 +1170,18 @@ async function loadFromCloud() {
     if (r.hub_notes !== null && r.hub_notes !== undefined) hubNotes = r.hub_notes;
     if (r.weekly_order) weeklyOrder = r.weekly_order;
     if (r.positions)    positions   = r.positions;
+
     // mirror to localStorage as offline backup
     save(); saveGoals(); saveQuestions(); saveWidgetNames();
     saveHubTitle(); saveHubNotes(); saveWeeklyOrder(); savePositions();
-    setSyncDot('saved'); 
-    console.log('[SYNC] Data synced to localStorage as backup');
+    console.log('[CloudSync] Data synced successfully');
+    setSyncDot('saved');
     return true;
-  } catch(e) { 
-    console.error('[SYNC] Error loading from cloud:', e);
-    setSyncDot('offline'); 
-    return false; 
+  } catch(e) {
+    console.error('[CloudSync] Error:', e.message);
+    console.log('[CloudSync] Falling back to localStorage');
+    setSyncDot('offline');
+    return false;
   }
 }
 
@@ -1165,28 +1190,35 @@ async function saveToCloud() {
   cloudSyncTimer = setTimeout(async () => {
     setSyncDot('saving');
     try {
-      console.log('[SYNC] Saving to Supabase...');
-      const res = await fetch(`${SB_URL}/rest/v1/welfare_data?id=eq.main`, {
-        method: 'PATCH',
-        headers: { ...SB_HDR, 'Prefer': 'return=minimal' },
-        body: JSON.stringify({
-          data: { projects: S.projects, tasks: S.tasks },
-          goals, questions, widget_names: widgetNames,
-          hub_title: hubTitle, hub_notes: hubNotes,
-          weekly_order: weeklyOrder, positions,
-          updated_at: new Date().toISOString()
-        })
-      });
+      const payload = {
+        data: { projects: S.projects, tasks: S.tasks },
+        goals, questions, widget_names: widgetNames,
+        hub_title: hubTitle, hub_notes: hubNotes,
+        weekly_order: weeklyOrder, positions,
+        updated_at: new Date().toISOString()
+      };
+
+      const res = await Promise.race([
+        fetch(`${SB_URL}/rest/v1/welfare_data?id=eq.main`, {
+          method: 'PATCH',
+          headers: { ...SB_HDR, 'Prefer': 'return=minimal' },
+          body: JSON.stringify(payload),
+          mode: 'cors',
+          credentials: 'omit'
+        }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 8000))
+      ]);
+
       if (res.ok) {
-        console.log('[SYNC] Successfully saved to Supabase');
+        console.log('[CloudSync] Data saved to cloud');
         setSyncDot('saved');
       } else {
-        console.warn('[SYNC] Save failed:', res.status, res.statusText);
-        setSyncDot('error');
+        console.error('[CloudSync] Save failed:', res.status, res.statusText);
+        setSyncDot('offline');
       }
-    } catch(e) { 
-      console.error('[SYNC] Error saving to cloud:', e);
-      setSyncDot('offline'); 
+    } catch(e) {
+      console.error('[CloudSync] Save error:', e.message);
+      setSyncDot('offline');
     }
   }, 1500);
 }
@@ -2720,22 +2752,23 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeTaskModal();cl
 // load localStorage first (instant)
 load(); loadLayout(); renderSidebar(); render();
 setSyncDot('saving');
-console.log('[SYNC] App initialized, attempting cloud sync...');
+
 // sync with cloud: if cloud has data → use it; if cloud is empty → push local data up
-loadFromCloud().then(loaded => {
-  if(loaded) {
-    console.log('[SYNC] Cloud data was loaded, re-rendering UI');
-    renderSidebar(); render(); // cloud had data — use it
-  } else {
-    console.log('[SYNC] Cloud is empty, pushing local data to cloud');
-    // cloud is empty — push all local data up now
-    saveToCloud();
-    setSyncDot('saving');
-  }
-}).catch(err => {
-  console.error('[SYNC] Error during initialization sync:', err);
-  setSyncDot('offline');
-});
+loadFromCloud()
+  .then(loaded => {
+    if(loaded) {
+      renderSidebar(); render(); // cloud had data — use it
+    } else {
+      // cloud is empty — push all local data up now
+      saveToCloud();
+      setSyncDot('saving');
+    }
+  })
+  .catch(err => {
+    console.error('[Init] Cloud sync failed:', err);
+    // Ensure app is always usable — data is already loaded from localStorage
+    setSyncDot('offline');
+  });
 
 // no resize re-render — canvas uses absolute positioning and saves positions in localStorage
 </script>
